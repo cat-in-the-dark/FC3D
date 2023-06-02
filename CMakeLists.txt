@@ -3,6 +3,9 @@ project(FC3D C)
 
 set(CMAKE_C_STANDARD 11)
 
+file(GLOB_RECURSE SOURCES src/*.c)
+file(GLOB_RECURSE HEADERS src/*.h)
+
 if (EMSCRIPTEN)
     set(PLATFORM Web)
     set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
@@ -12,27 +15,25 @@ if (EMSCRIPTEN)
 
     add_definitions(-DPLATFORM_WEB)
     add_definitions(-DUSE_WASM)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --bind --memory-init-file 0 -s INITIAL_MEMORY=64MB -s SAFE_HEAP=1")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s USE_GLFW=3 -s USE_WEBGL2=1 -s FORCE_FILESYSTEM=1")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s WASM=1")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s ASSERTIONS=1")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --use-preload-plugins")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --embed-file assets/")
-    set(CMAKE_EXECUTABLE_SUFFIX ".js")
 
     file(COPY assets DESTINATION ${CMAKE_BINARY_DIR}/)
     file(COPY index.html DESTINATION ${CMAKE_BINARY_DIR}/)
 endif ()
 
-file(GLOB_RECURSE SOURCES src/*.c)
-file(GLOB_RECURSE HEADERS src/*.h)
-
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
-add_subdirectory(vendor/raylib)
+if (EMSCRIPTEN)
+    SET_TARGET_PROPERTIES(${PROJECT_NAME} 
+        PROPERTIES SUFFIX ".js"
+        LINK_FLAGS "--bind -s WASM=1 -s USE_GLFW=3 -s USE_WEBGL2=1 -s FORCE_FILESYSTEM=1 --memory-init-file 0 -s INITIAL_MEMORY=64MB -s SAFE_HEAP=1 --use-preload-plugins --embed-file assets/")
+endif ()
 
-target_include_directories(${PROJECT_NAME} PUBLIC SYSTEM vendor/raylib/src)
-target_link_libraries(${PROJECT_NAME} raylib)
+
+add_subdirectory(vendor/raylib)
+add_subdirectory(vendor/lua)
+
+target_include_directories(${PROJECT_NAME} PUBLIC SYSTEM vendor/raylib/src vendor/lua/)
+target_link_libraries(${PROJECT_NAME} raylib lua)
 
 # Checks if OSX and links appropriate frameworks (Only required on MacOS)
 if (APPLE)
