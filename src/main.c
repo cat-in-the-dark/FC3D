@@ -52,14 +52,36 @@ int lua_DrawModel(lua_State* L) {
   return 0;
 }
 
-void Update() {
-  CallFunc("Update");
-
+void lua_Update(void) {
   lua_pushnumber(L, GetFrameTime());
   lua_setglobal(L, "dt");
 
   lua_pushnumber(L, GetTime());
   lua_setglobal(L, "time");
+
+  CallFunc("Update");
+}
+
+void lua_Draw(void) {
+  CallFunc("Draw");
+}
+
+void Draw(void) {
+  Vector3 pos = {0,0,0};
+  DrawModel(models[2], pos, 1, WHITE);
+
+  models[2].meshes[0].vertices[1] += 0.01;
+  UpdateMeshBuffer(
+    models[2].meshes[0], 
+    0,
+    models[2].meshes[0].vertices,
+    sizeof(float) * models[2].meshes[0].vertexCount * 3,
+    0
+  );
+}
+
+void Update() {
+  lua_Update();
 
   UpdateCamera(&camera, CAMERA_ORBITAL);
 
@@ -69,7 +91,10 @@ void Update() {
 
             BeginMode3D(camera);
 
-              CallFunc("Draw");
+              Draw();
+
+              lua_Draw();
+              
               DrawGrid(10, 1.0f);     // Draw a grid
 
             EndMode3D();
@@ -79,7 +104,7 @@ void Update() {
     EndDrawing();
 }
 
-void InitLua() {
+void lua_Init(void) {
   L = luaL_newstate();
   luaL_openlibs(L);
 
@@ -101,8 +126,51 @@ void InitLua() {
   TraceLog(LOG_INFO, "Lua loaded\n");
 }
 
+static Mesh CreateMesh() {
+  Mesh m = {0};
+  m.triangleCount = 1;
+  m.vertexCount = 3;
+  m.vertices = MemAlloc(m.vertexCount*3*sizeof(float));    // 3 vertices, 3 coordinates each (x, y, z)
+  m.texcoords = MemAlloc(m.vertexCount*2*sizeof(float));   // 3 vertices, 2 coordinates each (x, y)
+  m.normals = MemAlloc(m.vertexCount*3*sizeof(float));     // 3 vertices, 3 coordinates each (x, y, z)
+
+  // Vertex at (0, 0, 0)
+  m.vertices[0] = 0;
+  m.vertices[1] = 0;
+  m.vertices[2] = 0;
+  m.normals[0] = 0;
+  m.normals[1] = 1;
+  m.normals[2] = 0;
+  m.texcoords[0] = 0;
+  m.texcoords[1] = 0;
+
+  // Vertex at (1, 0, 2)
+  m.vertices[3] = 1;
+  m.vertices[4] = 0;
+  m.vertices[5] = 2;
+  m.normals[3] = 0;
+  m.normals[4] = 1;
+  m.normals[5] = 0;
+  m.texcoords[2] = 0.5f;
+  m.texcoords[3] = 1.0f;
+
+  // Vertex at (2, 0, 0)
+  m.vertices[6] = 2;
+  m.vertices[7] = 0;
+  m.vertices[8] = 0;
+  m.normals[6] = 0;
+  m.normals[7] = 1;
+  m.normals[8] = 0;
+  m.texcoords[4] = 1;
+  m.texcoords[5] =0;
+
+  UploadMesh(&m, true);
+
+  return m;
+}
+
 int main(void) {
-  InitLua();
+  lua_Init();
 
   const int screenWidth = 640;
   const int screenHeight = 480;
@@ -116,12 +184,20 @@ int main(void) {
   camera.fovy = 45.0f;                                // Camera field-of-view Y
   camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type
 
+  Image checked = GenImageChecked(2, 2, 1, 1, RED, GREEN);
+  Texture2D texture = LoadTextureFromImage(checked);
+  UnloadImage(checked);
+
   models[0] = LoadModel("assets/Car2.obj");         // Load OBJ model
   models[1] = LoadModel("assets/Car3.obj");         // Load OBJ model
   Texture2D texture0 = LoadTexture("assets/car2.png"); // Load model texture
   Texture2D texture1 = LoadTexture("assets/car3.png"); // Load model texture
   models[0].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture0;            // Set model diffuse texture
   models[1].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture1;            // Set model diffuse texture
+
+  Mesh mesh = CreateMesh();
+  models[2] = LoadModelFromMesh(mesh);
+  models[2].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture0; 
 
   SetTargetFPS(60); 
 
