@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <raylib.h>
+#include <rlgl.h>
+#include <stdio.h>
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
@@ -14,11 +16,15 @@
 #include <emscripten/emscripten.h>
 #endif
 
-
 static Camera camera = { 0 };
 static Model models[128];
 
 static lua_State* L;
+
+static RenderTexture2D target;
+static Shader bloom;
+static Shader barycentricShader;
+static int barycentricLoc;
 
 void CallFunc(const char* name) {
   lua_getglobal(L, name);
@@ -45,6 +51,7 @@ int lua_DrawModel(lua_State* L) {
     Model model = models[model_id]; // TODO: check model_id out of bound
 
     DrawModel(model, pos, scale, WHITE);
+    // DrawModelWires(model, pos, scale, WHITE);
   } else {
     luaL_error(L, "invalid parameters, mdl(idx, x,y,z, scale)");
   }
@@ -67,17 +74,7 @@ void lua_Draw(void) {
 }
 
 void Draw(void) {
-  Vector3 pos = {0,0,0};
-  DrawModel(models[2], pos, 1, WHITE);
-
-  models[2].meshes[0].vertices[1] += 0.01;
-  UpdateMeshBuffer(
-    models[2].meshes[0], 
-    0,
-    models[2].meshes[0].vertices,
-    sizeof(float) * models[2].meshes[0].vertexCount * 3,
-    0
-  );
+  // pass
 }
 
 void Update() {
@@ -85,7 +82,7 @@ void Update() {
 
   UpdateCamera(&camera, CAMERA_ORBITAL);
 
-    BeginDrawing();
+    BeginTextureMode(target); 
 
             ClearBackground(RAYWHITE);
 
@@ -95,11 +92,25 @@ void Update() {
 
               lua_Draw();
               
-              DrawGrid(10, 1.0f);     // Draw a grid
+              // DrawGrid(10, 1.0f);
 
             EndMode3D();
-            
-            DrawFPS(10, 10);
+
+    EndTextureMode();
+
+    BeginDrawing();
+      ClearBackground(BLACK);
+
+      BeginShaderMode(bloom);
+        DrawTextureRec(
+          target.texture,
+          (Rectangle){ 0, 0, (float)target.texture.width, (float)-target.texture.height },
+          (Vector2){ 0, 0 },
+          WHITE
+        );
+      EndShaderMode();
+
+      DrawFPS(10, 10);
 
     EndDrawing();
 }
@@ -126,47 +137,48 @@ void lua_Init(void) {
   TraceLog(LOG_INFO, "Lua loaded\n");
 }
 
-static Mesh CreateMesh() {
-  Mesh m = {0};
-  m.triangleCount = 1;
-  m.vertexCount = 3;
-  m.vertices = MemAlloc(m.vertexCount*3*sizeof(float));    // 3 vertices, 3 coordinates each (x, y, z)
-  m.texcoords = MemAlloc(m.vertexCount*2*sizeof(float));   // 3 vertices, 2 coordinates each (x, y)
-  m.normals = MemAlloc(m.vertexCount*3*sizeof(float));     // 3 vertices, 3 coordinates each (x, y, z)
+int calculateBarycentric(float** barycentric, int n_vertices) {
+  // For every triangle consisting of 6 vertices (3 points of two coordinates)
+  int n = n_vertices / 3;
 
-  // Vertex at (0, 0, 0)
-  m.vertices[0] = 0;
-  m.vertices[1] = 0;
-  m.vertices[2] = 0;
-  m.normals[0] = 0;
-  m.normals[1] = 1;
-  m.normals[2] = 0;
-  m.texcoords[0] = 0;
-  m.texcoords[1] = 0;
+  // we will have three points of three coordinates, respectively: 
+  // p_1 = (1, 0, 0), p_2 = (0, 1, 0), p_3 = (0, 0, 1).
+  float coords[6] = { 
+    1, 0,
+    0, 1,
+    0, 0,
+  };
 
-  // Vertex at (1, 0, 2)
-  m.vertices[3] = 1;
-  m.vertices[4] = 0;
-  m.vertices[5] = 2;
-  m.normals[3] = 0;
-  m.normals[4] = 1;
-  m.normals[5] = 0;
-  m.texcoords[2] = 0.5f;
-  m.texcoords[3] = 1.0f;
+  TraceLog(LOG_INFO, "calculateBarycentric n=%d vertices=%d", n, n_vertices);
+  float *bc = MemAlloc(6 * n * sizeof(float));
+  if (!bc) {
+    TraceLog(LOG_ERROR, "failed to allocate barycentric coordinates");
+    return -1;
+  }
 
-  // Vertex at (2, 0, 0)
-  m.vertices[6] = 2;
-  m.vertices[7] = 0;
-  m.vertices[8] = 0;
-  m.normals[6] = 0;
-  m.normals[7] = 1;
-  m.normals[8] = 0;
-  m.texcoords[4] = 1;
-  m.texcoords[5] =0;
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < 6; j++) {
+      bc[i*6 + j] = coords[j];
+    }
+  }
 
-  UploadMesh(&m, true);
+  *barycentric = bc;
+  return n * 6;
+}
 
-  return m;
+void applyWireframesMaterial(Model model) {
+  float* barycentric;
+  int n_barycentric = calculateBarycentric(&barycentric, model.meshes[0].vertexCount);
+
+  rlEnableVertexArray(model.meshes[0].vaoId);
+  rlLoadVertexBuffer(barycentric, n_barycentric * sizeof(float), false);
+  rlEnableVertexAttribute(barycentricLoc);
+  rlSetVertexAttribute(barycentricLoc, 2, RL_FLOAT, false, 0, (void*)0);
+  rlDisableVertexArray();
+
+  model.materials[0].shader = barycentricShader;
+  
+  MemFree(barycentric);
 }
 
 int main(void) {
@@ -177,6 +189,8 @@ int main(void) {
 
   InitWindow(screenWidth, screenHeight, "raylib [3d]");
 
+  // char *extensions = (char *)glGetString(GL_EXTENSIONS);
+
   // Define the camera to look into our 3d world
   camera.position = (Vector3){ 5.0f, 5.0f, 5.0f }; // Camera position
   camera.target = (Vector3){ 0.0f, 1.0f, 0.0f };      // Camera looking at point
@@ -184,20 +198,25 @@ int main(void) {
   camera.fovy = 45.0f;                                // Camera field-of-view Y
   camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type
 
-  Image checked = GenImageChecked(2, 2, 1, 1, RED, GREEN);
-  Texture2D texture = LoadTextureFromImage(checked);
-  UnloadImage(checked);
+  bloom = LoadShader(0, TextFormat("assets/shaders/glsl%i/bloom.fs", GLSL_VERSION));
+  barycentricShader = LoadShader(
+    TextFormat("assets/shaders/glsl%i/barycentric.vs", GLSL_VERSION),
+    TextFormat("assets/shaders/glsl%i/barycentric.fs", GLSL_VERSION)
+  );
+  barycentricLoc = GetShaderLocationAttrib(barycentricShader, "barycentric");
 
-  models[0] = LoadModel("assets/Car2.obj");         // Load OBJ model
-  models[1] = LoadModel("assets/Car3.obj");         // Load OBJ model
-  Texture2D texture0 = LoadTexture("assets/car2.png"); // Load model texture
-  Texture2D texture1 = LoadTexture("assets/car3.png"); // Load model texture
-  models[0].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture0;            // Set model diffuse texture
-  models[1].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture1;            // Set model diffuse texture
+  target = LoadRenderTexture(screenWidth, screenHeight);
+  models[0] = LoadModel("assets/Car2.obj");
+  models[1] = LoadModel("assets/Car3.obj");
+  models[2] = LoadModel("assets/castle.obj");
+  Texture2D texture0 = LoadTexture("assets/car2.png");
+  Texture2D texture1 = LoadTexture("assets/car3.png");
+  models[0].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture0;
+  models[1].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture1;
 
-  Mesh mesh = CreateMesh();
-  models[2] = LoadModelFromMesh(mesh);
-  models[2].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture0; 
+  applyWireframesMaterial(models[0]);
+  // applyWireframesMaterial(models[1]);
+  applyWireframesMaterial(models[2]);
 
   SetTargetFPS(60); 
 
@@ -212,11 +231,16 @@ int main(void) {
   lua_close(L);
 
   UnloadModel(models[0]);         // Unload model
-  UnloadModel(models[1]);         // Unload model
-  UnloadTexture(texture0);     // Unload texture
-  UnloadTexture(texture1);     // Unload texture
+  // UnloadModel(models[1]);         // Unload model
+  // UnloadTexture(texture0);     // Unload texture
+  // UnloadTexture(texture1);     // Unload texture
+  UnloadRenderTexture(target);
+  UnloadShader(bloom);
+  UnloadShader(barycentricShader);
 
   CloseWindow();              // Close window and OpenGL context
+
+  // MemFree(barycentric);
 
   return 0;
 }
