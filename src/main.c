@@ -1,22 +1,21 @@
-#include <stdio.h>
+#include <lauxlib.h>
+#include <lua.h>
+#include <lualib.h>
 #include <raylib.h>
 #include <rlgl.h>
 #include <stdio.h>
-#include <lua.h>
-#include <lualib.h>
-#include <lauxlib.h>
 
 #if defined(PLATFORM_DESKTOP)
-    #define GLSL_VERSION            330
-#else   // PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB
-    #define GLSL_VERSION            100
+#define GLSL_VERSION 330
+#else  // PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB
+#define GLSL_VERSION 100
 #endif
 
 #if defined(PLATFORM_WEB)
 #include <emscripten/emscripten.h>
 #endif
 
-static Camera camera = { 0 };
+static Camera camera = {0};
 static Model models[128];
 
 static lua_State* L;
@@ -47,8 +46,8 @@ int lua_DrawModel(lua_State* L) {
     float z = luaL_checknumber(L, 4);
     float scale = luaL_checknumber(L, 5);
 
-    Vector3 pos = {x,y,z};
-    Model model = models[model_id]; // TODO: check model_id out of bound
+    Vector3 pos = {x, y, z};
+    Model model = models[model_id];  // TODO: check model_id out of bound
 
     DrawModel(model, pos, scale, WHITE);
     // DrawModelWires(model, pos, scale, WHITE);
@@ -82,37 +81,33 @@ void Update() {
 
   UpdateCamera(&camera, CAMERA_ORBITAL);
 
-    BeginTextureMode(target); 
+  BeginTextureMode(target);
 
-            ClearBackground(RAYWHITE);
+  ClearBackground(RAYWHITE);
 
-            BeginMode3D(camera);
+  BeginMode3D(camera);
 
-              Draw();
+  Draw();
 
-              lua_Draw();
-              
-              // DrawGrid(10, 1.0f);
+  lua_Draw();
 
-            EndMode3D();
+  // DrawGrid(10, 1.0f);
 
-    EndTextureMode();
+  EndMode3D();
 
-    BeginDrawing();
-      ClearBackground(BLACK);
+  EndTextureMode();
 
-      BeginShaderMode(bloom);
-        DrawTextureRec(
-          target.texture,
-          (Rectangle){ 0, 0, (float)target.texture.width, (float)-target.texture.height },
-          (Vector2){ 0, 0 },
-          WHITE
-        );
-      EndShaderMode();
+  BeginDrawing();
+  ClearBackground(BLACK);
 
-      DrawFPS(10, 10);
+  BeginShaderMode(bloom);
+  DrawTextureRec(target.texture, (Rectangle){0, 0, (float) target.texture.width, (float) -target.texture.height},
+                 (Vector2){0, 0}, WHITE);
+  EndShaderMode();
 
-    EndDrawing();
+  DrawFPS(10, 10);
+
+  EndDrawing();
 }
 
 void lua_Init(void) {
@@ -130,7 +125,7 @@ void lua_Init(void) {
 
   int err = luaL_dofile(L, "assets/main.lua");
   if (err != LUA_OK) {
-    const char * msg = lua_tostring(L, -1);
+    const char* msg = lua_tostring(L, -1);
     TraceLog(LOG_ERROR, "lua: %s", msg);
     return;
   }
@@ -141,16 +136,14 @@ int calculateBarycentric(float** barycentric, int n_vertices) {
   // For every triangle consisting of 6 vertices (3 points of two coordinates)
   int n = n_vertices / 3;
 
-  // we will have three points of three coordinates, respectively: 
+  // we will have three points of three coordinates, respectively:
   // p_1 = (1, 0, 0), p_2 = (0, 1, 0), p_3 = (0, 0, 1).
-  float coords[6] = { 
-    1, 0,
-    0, 1,
-    0, 0,
+  float coords[6] = {
+      1, 0, 0, 1, 0, 0,
   };
 
   TraceLog(LOG_INFO, "calculateBarycentric n=%d vertices=%d", n, n_vertices);
-  float *bc = MemAlloc(6 * n * sizeof(float));
+  float* bc = MemAlloc(6 * n * sizeof(float));
   if (!bc) {
     TraceLog(LOG_ERROR, "failed to allocate barycentric coordinates");
     return -1;
@@ -158,7 +151,7 @@ int calculateBarycentric(float** barycentric, int n_vertices) {
 
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < 6; j++) {
-      bc[i*6 + j] = coords[j];
+      bc[i * 6 + j] = coords[j];
     }
   }
 
@@ -173,11 +166,11 @@ void applyWireframesMaterial(Model model) {
   rlEnableVertexArray(model.meshes[0].vaoId);
   rlLoadVertexBuffer(barycentric, n_barycentric * sizeof(float), false);
   rlEnableVertexAttribute(barycentricLoc);
-  rlSetVertexAttribute(barycentricLoc, 2, RL_FLOAT, false, 0, (void*)0);
+  rlSetVertexAttribute(barycentricLoc, 2, RL_FLOAT, false, 0, (void*) 0);
   rlDisableVertexArray();
 
   model.materials[0].shader = barycentricShader;
-  
+
   MemFree(barycentric);
 }
 
@@ -192,17 +185,15 @@ int main(void) {
   // char *extensions = (char *)glGetString(GL_EXTENSIONS);
 
   // Define the camera to look into our 3d world
-  camera.position = (Vector3){ 5.0f, 5.0f, 5.0f }; // Camera position
-  camera.target = (Vector3){ 0.0f, 1.0f, 0.0f };      // Camera looking at point
-  camera.up = (Vector3){ 0.0f, 1.6f, 0.0f };          // Camera up vector (rotation towards target)
-  camera.fovy = 45.0f;                                // Camera field-of-view Y
-  camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type
+  camera.position = (Vector3){5.0f, 5.0f, 5.0f};  // Camera position
+  camera.target = (Vector3){0.0f, 1.0f, 0.0f};    // Camera looking at point
+  camera.up = (Vector3){0.0f, 1.6f, 0.0f};        // Camera up vector (rotation towards target)
+  camera.fovy = 45.0f;                            // Camera field-of-view Y
+  camera.projection = CAMERA_PERSPECTIVE;         // Camera projection type
 
   bloom = LoadShader(0, TextFormat("assets/shaders/glsl%i/bloom.fs", GLSL_VERSION));
-  barycentricShader = LoadShader(
-    TextFormat("assets/shaders/glsl%i/barycentric.vs", GLSL_VERSION),
-    TextFormat("assets/shaders/glsl%i/barycentric.fs", GLSL_VERSION)
-  );
+  barycentricShader = LoadShader(TextFormat("assets/shaders/glsl%i/barycentric.vs", GLSL_VERSION),
+                                 TextFormat("assets/shaders/glsl%i/barycentric.fs", GLSL_VERSION));
   barycentricLoc = GetShaderLocationAttrib(barycentricShader, "barycentric");
 
   target = LoadRenderTexture(screenWidth, screenHeight);
@@ -218,19 +209,19 @@ int main(void) {
   // applyWireframesMaterial(models[1]);
   applyWireframesMaterial(models[2]);
 
-  SetTargetFPS(60); 
+  SetTargetFPS(60);
 
-  #if defined(PLATFORM_WEB)
+#if defined(PLATFORM_WEB)
   emscripten_set_main_loop(Update, 0, 1);
-  #else
+#else
   while (!WindowShouldClose()) {
     Update();
   }
-  #endif
+#endif
 
   lua_close(L);
 
-  UnloadModel(models[0]);         // Unload model
+  UnloadModel(models[0]);  // Unload model
   // UnloadModel(models[1]);         // Unload model
   // UnloadTexture(texture0);     // Unload texture
   // UnloadTexture(texture1);     // Unload texture
@@ -238,7 +229,7 @@ int main(void) {
   UnloadShader(bloom);
   UnloadShader(barycentricShader);
 
-  CloseWindow();              // Close window and OpenGL context
+  CloseWindow();  // Close window and OpenGL context
 
   // MemFree(barycentric);
 
