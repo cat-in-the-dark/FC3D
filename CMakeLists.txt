@@ -17,23 +17,32 @@ if (EMSCRIPTEN)
     add_definitions(-DUSE_WASM)
 
     file(COPY assets DESTINATION ${CMAKE_BINARY_DIR}/)
-    file(COPY index.html DESTINATION ${CMAKE_BINARY_DIR}/)
 endif ()
 
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+if (${PLATFORM} MATCHES "Web")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Os -s USE_GLFW=3 -s ASSERTIONS=1 -s WASM=1 -s ASYNCIFY")
+    # Since WASM is used, ALLOW_MEMORY_GROWTH has no extra overheads
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -s ALLOW_MEMORY_GROWTH=1 --no-heap-copy")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/index.html")
+    set(CMAKE_EXECUTABLE_SUFFIX ".html")
 
-if (EMSCRIPTEN)
-    SET_TARGET_PROPERTIES(${PROJECT_NAME} 
-        PROPERTIES SUFFIX ".js"
-        LINK_FLAGS "--bind -s WASM=1 -s USE_GLFW=3 -s USE_WEBGL2=1 -s FORCE_FILESYSTEM=1 --memory-init-file 0 -s INITIAL_MEMORY=64MB -s SAFE_HEAP=1 --use-preload-plugins --embed-file assets/")
+    # Remove the -rdynamic flag because otherwise emscripten
+    # does not generate HTML+JS+WASM files, only a non-working
+    # and fat HTML
+    string(REPLACE "-rdynamic" "" CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "${CMAKE_SHARED_LIBRARY_LINK_C_FLAGS}")
 endif ()
-
 
 add_subdirectory(vendor/raylib)
 add_subdirectory(vendor/lua)
 
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+
 target_include_directories(${PROJECT_NAME} PUBLIC SYSTEM vendor/raylib/src vendor/lua/)
 target_link_libraries(${PROJECT_NAME} raylib lua)
+
+if (${PLATFORM} MATCHES "Web")
+    SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINK_FLAGS "--embed-file assets/")
+endif ()
 
 # Checks if OSX and links appropriate frameworks (Only required on MacOS)
 if (APPLE)
