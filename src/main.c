@@ -174,6 +174,44 @@ void applyWireframesMaterial(Model model) {
   MemFree(barycentric);
 }
 
+typedef struct LineMesh {
+  int vertexCount;  // Number of vertices stored in arrays
+  int linesCount;   // Number of lines stored
+
+  float* vertices;  // Vertex position (XYZ - 3 components per vertex) (shader-location = 0)
+  int* lines;
+
+  // TODO: animation data?
+
+  // OpenGL identifiers
+  unsigned int vaoId;  // OpenGL Vertex Array Object id
+  unsigned int vboId;  // OpenGL Vertex Buffer Objects id (default vertex data)
+} LineMesh;
+
+typedef struct LineModel {
+  Matrix transform;  // Local transform matrix
+
+  LineMesh* meshes;
+
+  // TODO: animation data?
+} LineModel;
+
+void DrawLineModel(LineModel model, Vector3 position, float scale, Color color) {
+  float x = 0;
+  float y = 0;
+  float z = 0;
+
+  rlPushMatrix();
+  rlTranslatef(position.x, position.y, position.z);
+  rlBegin(RL_LINES);
+  rlColor4ub(color.r, color.g, color.b, color.a);
+
+  // TODO: draw rlVertex3f
+
+  rlEnd();
+  rlPopMatrix();
+}
+
 int main(void) {
   lua_Init();
 
