@@ -25,6 +25,45 @@ static Shader bloom;
 static Shader barycentricShader;
 static int barycentricLoc;
 
+void DrawLineModel(Model model, Vector3 position, float scale, Color color) {
+  float x = 0;
+  float y = 0;
+  float z = 0;
+
+  Mesh mesh = model.meshes[0];
+
+  rlPushMatrix();
+  rlTranslatef(position.x, position.y, position.z);
+
+  rlEnableBackfaceCulling();
+  rlBegin(RL_LINES);
+  rlColor4ub(color.r, color.g, color.b, color.a);
+
+  // TODO: maybe we can load vertices for line in a buffer and drender directly from gpu mem?
+  for (int i = 0; i < mesh.triangleCount * 3; i += 3) {
+    // unsigned short index1 = mesh.indices[i];
+    // unsigned short index2 = mesh.indices[i + 1];
+    // unsigned short index3 = mesh.indices[i + 2];
+    int index1 = i;
+    int index2 = i + 1;
+    int index3 = i + 2;
+
+    // Draw lines for each edge of the triangle
+    rlVertex3f(mesh.vertices[3 * index1], mesh.vertices[3 * index1 + 1], mesh.vertices[3 * index1 + 2]);
+    rlVertex3f(mesh.vertices[3 * index2], mesh.vertices[3 * index2 + 1], mesh.vertices[3 * index2 + 2]);
+
+    rlVertex3f(mesh.vertices[3 * index2], mesh.vertices[3 * index2 + 1], mesh.vertices[3 * index2 + 2]);
+    rlVertex3f(mesh.vertices[3 * index3], mesh.vertices[3 * index3 + 1], mesh.vertices[3 * index3 + 2]);
+
+    rlVertex3f(mesh.vertices[3 * index3], mesh.vertices[3 * index3 + 1], mesh.vertices[3 * index3 + 2]);
+    rlVertex3f(mesh.vertices[3 * index1], mesh.vertices[3 * index1 + 1], mesh.vertices[3 * index1 + 2]);
+  }
+
+  rlDisableBackfaceCulling();
+  rlEnd();
+  rlPopMatrix();
+}
+
 void CallFunc(const char* name) {
   lua_getglobal(L, name);
   if (lua_isfunction(L, -1)) {
@@ -49,8 +88,8 @@ int lua_DrawModel(lua_State* L) {
     Vector3 pos = {x, y, z};
     Model model = models[model_id];  // TODO: check model_id out of bound
 
-    DrawModel(model, pos, scale, WHITE);
-    // DrawModelWires(model, pos, scale, WHITE);
+    DrawLineModel(model, pos, scale, RED);
+    DrawModel(model, pos, scale * 0.99, BLACK);  // FIXME: the bigger scale the bigger scale offset. not good
   } else {
     luaL_error(L, "invalid parameters, mdl(idx, x,y,z, scale)");
   }
@@ -73,7 +112,9 @@ void lua_Draw(void) {
 }
 
 void Draw(void) {
-  // pass
+  // Vector3 pos = {.x = 0, .y = 0, .z = 0};
+  // DrawLineModel(models[1], pos, 1.0, RED);
+  // DrawModel(models[1], pos, 0.99, BLACK);
 }
 
 void Update() {
@@ -83,15 +124,13 @@ void Update() {
 
   BeginTextureMode(target);
 
-  ClearBackground(RAYWHITE);
+  ClearBackground(BLACK);
 
   BeginMode3D(camera);
 
-  Draw();
+  // Draw();
 
   lua_Draw();
-
-  // DrawGrid(10, 1.0f);
 
   EndMode3D();
 
@@ -196,22 +235,6 @@ typedef struct LineModel {
   // TODO: animation data?
 } LineModel;
 
-void DrawLineModel(LineModel model, Vector3 position, float scale, Color color) {
-  float x = 0;
-  float y = 0;
-  float z = 0;
-
-  rlPushMatrix();
-  rlTranslatef(position.x, position.y, position.z);
-  rlBegin(RL_LINES);
-  rlColor4ub(color.r, color.g, color.b, color.a);
-
-  // TODO: draw rlVertex3f
-
-  rlEnd();
-  rlPopMatrix();
-}
-
 int main(void) {
   lua_Init();
 
@@ -238,14 +261,14 @@ int main(void) {
   models[0] = LoadModel("assets/Car2.obj");
   models[1] = LoadModel("assets/Car3.obj");
   models[2] = LoadModel("assets/castle.obj");
-  Texture2D texture0 = LoadTexture("assets/car2.png");
-  Texture2D texture1 = LoadTexture("assets/car3.png");
-  models[0].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture0;
-  models[1].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture1;
+  // Texture2D texture0 = LoadTexture("assets/car2.png");
+  // Texture2D texture1 = LoadTexture("assets/car3.png");
+  // models[0].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture0;
+  // models[1].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture1;
 
-  applyWireframesMaterial(models[0]);
+  // applyWireframesMaterial(models[0]);
   // applyWireframesMaterial(models[1]);
-  applyWireframesMaterial(models[2]);
+  // applyWireframesMaterial(models[2]);
 
   SetTargetFPS(60);
 
