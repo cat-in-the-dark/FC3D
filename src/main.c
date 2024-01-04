@@ -34,6 +34,7 @@ void DrawLineModel(Model model, Vector3 position, float scale, Color color) {
 
   rlPushMatrix();
   rlTranslatef(position.x, position.y, position.z);
+  rlScalef(scale, scale, scale);
 
   rlEnableBackfaceCulling();
   rlBegin(RL_LINES);
